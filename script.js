@@ -65,7 +65,12 @@ function setupConnectionListeners() {
     connection.on('data', (data) => {
         if (data && data.type === 'file-transfer') {
             addLog(`[P2P] Menerima file materi kuliah: "${data.filename}"`, "p2p");
-            addLog(`[FILE-GET] Berhasil menerima file! -> <a href="${data.fileData}" download="${data.filename}" class="btn-download">Klik untuk Simpan ke Laptop (${data.filename})</a>`, "file-get");
+            
+            // Mengubah data biner murni menjadi URL unduhan lokal yang sangat ringan
+            const blob = data.fileData instanceof Blob ? data.fileData : new Blob([data.fileData]);
+            const downloadUrl = URL.createObjectURL(blob);
+            
+            addLog(`[FILE-GET] Berhasil menerima file! -> <a href="${downloadUrl}" download="${data.filename}" class="btn-download">Klik untuk Simpan (${data.filename})</a>`, "file-get");
         }
     });
     connection.on('close', () => {
@@ -91,17 +96,16 @@ ui.btnSendFile.addEventListener('click', () => {
     addLog(`[SYSTEM] Mulai mengirim file: "${file.name}" via P2P...`, "system");
     ui.btnSendFile.disabled = true;
     ui.progressWrapper.style.display = "block";
-    ui.progressBar.value = 0;
+    ui.progressBar.value = 50;
     
-    const fileReader = new FileReader();
-    fileReader.onload = (e) => {
-        const base64Data = e.target.result; 
-        const dataToSend = {
+    try {
+        // Optimasi: Kirim objek berkas mentah (Blob) langsung tanpa convert Base64 teks
+        connection.send({
             type: 'file-transfer',
             filename: file.name,
-            fileData: base64Data
-        };
-        connection.send(dataToSend);
+            fileData: file
+        });
+        
         ui.progressBar.value = 100;
         addLog(`[SYSTEM] Berhasil mengirim file "${file.name}" ke browser teman!`, "success");
         setTimeout(() => {
@@ -109,11 +113,11 @@ ui.btnSendFile.addEventListener('click', () => {
             ui.btnSendFile.disabled = false;
             ui.fileInput.value = "";
         }, 1500);
-    };
-    fileReader.onerror = () => {
-        addLog(`[ERROR] Gagal membaca file untuk pengiriman.`, "failed");
-    };
-    fileReader.readAsDataURL(file);
+    } catch (err) {
+        addLog(`[ERROR] Gagal mengirim data biner: ${err.message}`, "failed");
+        ui.btnSendFile.disabled = false;
+        ui.progressWrapper.style.display = "none";
+    }
 });
 
 ui.btnCopyId.addEventListener('click', () => {
