@@ -79,12 +79,20 @@ ui.fileInput.addEventListener('change', (e) => {
 });
 
 ui.btnSendFile.addEventListener('click', () => {
-    if (!connection || !ui.fileInput.files.length) return;
+    if (!connection) return;
+    
+    if (!ui.fileInput.files.length) {
+        addLog("[WARNING] Gagal mengirim: Silakan pilih file terlebih dahulu!", "system");
+        alert("Pilih file materi kuliahnya dulu, King!");
+        return;
+    }
+
     const file = ui.fileInput.files[0];
     addLog(`[SYSTEM] Mulai mengirim file: "${file.name}" via P2P...`, "system");
     ui.btnSendFile.disabled = true;
     ui.progressWrapper.style.display = "block";
     ui.progressBar.value = 0;
+    
     const fileReader = new FileReader();
     fileReader.onload = (e) => {
         const base64Data = e.target.result; 
