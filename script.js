@@ -1,7 +1,9 @@
 ﻿let peer = null;         
 let connection = null;   
 let myPeerId = null;     
-let currentTransferHeader = null; // State terdistribusi untuk menyimpan informasi file yang akan datang
+
+// State terdistribusi untuk menampung serpihan berkas (chunks) yang masuk
+let incomingFiles = {}; 
 
 const ui = {
     myId: document.getElementById('my-peer-id'),
@@ -19,7 +21,18 @@ const ui = {
 
 function initDistributedNode() {
     addLog("[SYSTEM] Menginisialisasi Jaringan WebRTC Peer-to-Peer...", "system");
-    peer = new Peer();
+    
+    // OPTIMASI JARINGAN: Menggunakan Google STUN Server agar tembus blokir antar jaringan (Wi-Fi vs Seluler)
+    peer = new Peer({
+        config: {
+            'iceServers': [
+                { url: 'stun:stun.l.google.com:19302' },
+                { url: 'stun:stun1.l.google.com:19302' },
+                { url: 'stun:stun2.l.google.com:19302' }
+            ]
+        }
+    });
+
     peer.on('open', (id) => {
         myPeerId = id;
         ui.myId.innerText = id;
@@ -28,11 +41,13 @@ function initDistributedNode() {
         addLog(`[SYSTEM] Node Anda aktif. ID terdistribusi Anda: ${id}`, "success");
         addLog(`[SYSTEM] Bagikan ID ini ke teman kampus Anda.`, "system");
     });
+
     peer.on('error', (err) => {
         ui.status.innerText = "Status: Gagal Terhubung Jaringan";
         ui.status.className = "status-text failed";
         addLog(`[ERROR] Masalah jaringan WebRTC: ${err.type}`, "failed");
     });
+
     peer.on('connection', (conn) => {
         connection = conn;
         setupConnectionListeners();
@@ -64,28 +79,40 @@ function setupConnectionListeners() {
         updateUiConnected(connection.peer);
     });
     
-    // LISTENER PROTOKOL BARU
+    // PROTOKOL PENERIMAAN PAKET DATA (CHUNK ASSEMBLY)
     connection.on('data', (data) => {
-        // Cek jika yang masuk adalah Paket 1: Sinyal Metadata Control
-        if (data && data.type === 'metadata') {
-            currentTransferHeader = data;
-            addLog(`[P2P] Sinyal masuk terdeteksi untuk berkas: "${data.filename}"`, "p2p");
+        if (!data) return;
+
+        // Langkah 1: Menerima Informasi Awal Berkas (Header)
+        if (data.type === 'file-start') {
+            incomingFiles[data.filename] = {
+                fileType: data.fileType,
+                totalChunks: data.totalChunks,
+                chunks: new Array(data.totalChunks),
+                receivedCount: 0
+            };
+            addLog(`[P2P] Sinyal masuk berkas: "${data.filename}" (${data.totalChunks} paket data)...`, "p2p");
         } 
-        // Cek jika data yang masuk setelahnya adalah Paket 2: Data Biner Mentah
-        else if (data) {
-            const isBinary = data instanceof ArrayBuffer || data instanceof Blob || data.byteLength !== undefined || data.size !== undefined;
-            
-            if (isBinary && currentTransferHeader) {
-                addLog(`[P2P] Menjahit paket biner untuk berkas "${currentTransferHeader.filename}"...`, "p2p");
+        // Langkah 2: Menerima Serpihan Berkas dan Menjahitnya Kembali
+        else if (data.type === 'file-chunk') {
+            const fileState = incomingFiles[data.filename];
+            if (fileState) {
+                fileState.chunks[data.index] = data.data;
+                fileState.receivedCount++;
                 
-                // Konversi aman biner murni lintas platform menjadi Blob lokal siap unduh
-                const blob = new Blob([data], { type: currentTransferHeader.fileType });
-                const downloadUrl = URL.createObjectURL(blob);
-                
-                addLog(`[FILE-GET] Berhasil menerima file! -> <a href="${downloadUrl}" download="${currentTransferHeader.filename}" class="btn-download">Klik untuk Simpan (${currentTransferHeader.filename})</a>`, "file-get");
-                
-                // Reset state untuk mengosongkan antrean file berikutnya
-                currentTransferHeader = null;
+                // Jika semua paket serpihan sudah lengkap terkumpul
+                if (fileState.receivedCount === fileState.totalChunks) {
+                    addLog(`[P2P] Semua paket berkas "${data.filename}" sukses diterima! Menyusun file...`, "p2p");
+                    
+                    // Satukan serpihan biner murni menjadi Blob tunggal siap unduh
+                    const blob = new Blob(fileState.chunks, { type: fileState.fileType });
+                    const downloadUrl = URL.createObjectURL(blob);
+                    
+                    addLog(`[FILE-GET] Berhasil! -> <a href="${downloadUrl}" download="${data.filename}" class="btn-download">Klik untuk Simpan (${data.filename})</a>`, "file-get");
+                    
+                    // Bersihkan memori RAM dari state tampungan
+                    delete incomingFiles[data.filename];
+                }
             }
         }
     });
@@ -100,6 +127,7 @@ ui.fileInput.addEventListener('change', (e) => {
     ui.btnSendFile.disabled = e.target.files.length === 0;
 });
 
+// PROTOKOL PENGIRIMAN DATA BERTAHAP (DATA CHUNKING STREAM)
 ui.btnSendFile.addEventListener('click', () => {
     if (!connection) return;
     
@@ -110,41 +138,63 @@ ui.btnSendFile.addEventListener('click', () => {
     }
 
     const file = ui.fileInput.files[0];
-    addLog(`[SYSTEM] Mempersiapkan pengiriman berkas: "${file.name}"`, "system");
+    addLog(`[SYSTEM] Membaca berkas kuliah: "${file.name}"`, "system");
     ui.btnSendFile.disabled = true;
     ui.progressWrapper.style.display = "block";
-    ui.progressBar.value = 20;
+    ui.progressBar.value = 0;
     
-    // LANGKAH 1: Kirim Metadata Kontrol Terlebih Dahulu
-    connection.send({
-        type: 'metadata',
-        filename: file.name,
-        fileType: file.type
-    });
-    
-    ui.progressBar.value = 50;
-    
-    // LANGKAH 2: Baca berkas sebagai ArrayBuffer (Biner murni level rendah) dan langsung alirkan
     const fileReader = new FileReader();
     fileReader.onload = (e) => {
-        addLog(`[SYSTEM] Mengalirkan payload biner via WebRTC DataChannel...`, "system");
-        try {
-            // Kirim langsung biner tingkat atas tanpa dibungkus objek JSON kustom
-            connection.send(e.target.result);
-            
-            ui.progressBar.value = 100;
-            addLog(`[SYSTEM] Berhasil mengirim file "${file.name}" ke browser teman!`, "success");
-            setTimeout(() => {
-                ui.progressWrapper.style.display = "none";
-                ui.btnSendFile.disabled = false;
-                ui.fileInput.value = "";
-            }, 1500);
-        } catch (err) {
-            addLog(`[ERROR] Gagal transfer biner murni: ${err.message}`, "failed");
-            ui.btnSendFile.disabled = false;
-            ui.progressWrapper.style.display = "none";
+        const arrayBuffer = e.target.result;
+        const CHUNK_SIZE = 16384; // Potong berkas menjadi serpihan aman sebesar 16KB per paket
+        const totalChunks = Math.ceil(arrayBuffer.byteLength / CHUNK_SIZE);
+        
+        addLog(`[SYSTEM] Memecah berkas menjadi ${totalChunks} paket data...`, "system");
+        
+        // KIRIM HEADER: Beritahu penerima nama berkas dan jumlah paketnya
+        connection.send({
+            type: 'file-start',
+            filename: file.name,
+            fileType: file.type,
+            totalChunks: totalChunks
+        });
+        
+        let chunkIndex = 0;
+        
+        // Fungsi rekursif untuk mengalirkan paket satu per satu dengan jeda aman
+        function streamNextChunk() {
+            if (chunkIndex < totalChunks) {
+                const start = chunkIndex * CHUNK_SIZE;
+                const end = Math.min(arrayBuffer.byteLength, start + CHUNK_SIZE);
+                const chunk = arrayBuffer.slice(start, end);
+                
+                // Kirim serpihan paket ke-n
+                connection.send({
+                    type: 'file-chunk',
+                    filename: file.name,
+                    index: chunkIndex,
+                    data: chunk
+                });
+                
+                chunkIndex++;
+                ui.progressBar.value = Math.round((chunkIndex / totalChunks) * 100);
+                
+                // Jeda rahasia 5ms agar buffer jaringan HP tidak meluap (overflow)
+                setTimeout(streamNextChunk, 5);
+            } else {
+                addLog(`[SYSTEM] Sukses mengalirkan seluruh paket berkas "${file.name}"!`, "success");
+                setTimeout(() => {
+                    ui.progressWrapper.style.display = "none";
+                    ui.btnSendFile.disabled = false;
+                    ui.fileInput.value = "";
+                }, 1500);
+            }
         }
+        
+        // Mulai aliran streaming data
+        setTimeout(streamNextChunk, 200);
     };
+    
     fileReader.onerror = () => {
         addLog(`[ERROR] Gagal membaca berkas kuliah.`, "failed");
         ui.btnSendFile.disabled = false;
@@ -189,7 +239,6 @@ function resetUiConnection() {
     ui.remoteIdInput.disabled = false;
     ui.remoteIdInput.value = "";
     ui.btnConnect.disabled = false;
-    currentTransferHeader = null;
 }
 
 function addLog(message, type) {
