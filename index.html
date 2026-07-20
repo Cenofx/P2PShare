@@ -14,6 +14,7 @@
             <p class="subtitle">Berbagi File Instan Tanpa Internet (Peer-to-Peer Real-time)</p>
             <div class="group-badge">Kelompok 4: Aksan, Jabal, Husen, Aulan</div>
         </header>
+        
         <main class="grid-layout">
             <section class="card connection-panel">
                 <h2>1. Identitas Anda (Node)</h2>
@@ -32,6 +33,7 @@
                 </div>
                 <div id="connection-status" class="status-text pending">Status: Belum Terhubung</div>
             </section>
+            
             <section class="card transfer-panel" id="transfer-panel" style="opacity: 0.5; pointer-events: none;">
                 <h2>3. Kirim File</h2>
                 <p class="info-text">Pilih file materi kuliah untuk dikirim langsung ke browser teman.</p>
@@ -45,8 +47,17 @@
                 </div>
             </section>
         </main>
+
+        <!-- CARD BARU: KHUSUS KOTAK MASUK & UNDUHAN FILE -->
+        <section class="card files-section">
+            <h2>📥 Kotak Masuk & Unduhan File</h2>
+            <div id="files-list" class="files-list">
+                <div id="no-files-msg" class="no-files-msg">Belum ada file yang dikirim atau diterima.</div>
+            </div>
+        </section>
+
         <section class="card logs-section">
-            <h2>📜 Konsol Log & File Masuk (Sistem Terdistribusi Real-time)</h2>
+            <h2>📜 Konsol Log Sistem</h2>
             <div id="log-container" class="log-container">
                 <p class="log-entry system">[SYSTEM] Menunggu library terdistribusi dimuat...</p>
             </div>

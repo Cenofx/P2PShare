@@ -24,12 +24,7 @@ header {
     text-align: center;
     margin-bottom: 2rem;
 }
-.logo {
-    font-size: 2.2rem;
-    font-weight: 800;
-    letter-spacing: -0.05em;
-    margin: 0;
-}
+.logo { font-size: 2.2rem; font-weight: 800; letter-spacing: -0.05em; margin: 0; }
 .accent { color: var(--primary); }
 .subtitle { color: var(--text-muted); margin: 0.2rem 0 0.8rem 0; font-size: 1rem; }
 .group-badge {
@@ -52,6 +47,7 @@ header {
     border: 1px solid var(--border-color);
     border-radius: 12px;
     padding: 1.2rem;
+    margin-bottom: 1.5rem;
 }
 h2 { margin-top: 0; font-size: 1.1rem; color: var(--primary); }
 .peer-id-display {
@@ -106,9 +102,54 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 progress { width: 100%; height: 10px; border-radius: 5px; }
 progress::-webkit-progress-bar { background-color: #020617; border-radius: 5px; }
 progress::-webkit-progress-value { background-color: var(--primary); border-radius: 5px; }
-.logs-section h2 { color: var(--text-muted); }
+
+.files-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background-color: #020617;
+    padding: 12px;
+    border-radius: 8px;
+    min-height: 60px;
+}
+.no-files-msg {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-align: center;
+    padding: 15px 0;
+}
+.file-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: #1e293b;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    gap: 15px;
+}
+.file-info { display: flex; align-items: center; gap: 10px; }
+.file-icon { font-size: 1.5rem; }
+.file-details { display: flex; flex-direction: column; }
+.file-name { font-size: 0.9rem; font-weight: 600; color: var(--text-main); word-break: break-all; }
+.file-meta { font-size: 0.75rem; color: var(--text-muted); }
+.btn-download-action {
+    background-color: var(--success);
+    color: white;
+    text-decoration: none;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: bold;
+    white-space: nowrap;
+    text-align: center;
+}
+.btn-download-action:hover { opacity: 0.9; }
+.file-row.sent { border-left: 4px solid var(--primary); }
+.file-row.received { border-left: 4px solid var(--success); }
+
 .log-container {
-    height: 180px;
+    height: 140px;
     overflow-y: auto;
     font-family: monospace;
     font-size: 0.85rem;
@@ -122,30 +163,20 @@ progress::-webkit-progress-value { background-color: var(--primary); border-radi
 .log-entry { margin: 0; padding: 3px; border-radius: 4px; }
 .log-entry.system { color: #eab308; }
 .log-entry.p2p { color: var(--primary); }
-.log-entry.file-get { color: var(--success); background-color: rgba(34, 197, 94, 0.1); }
-.btn-download { color: var(--success); text-decoration: underline; cursor: pointer; font-weight: bold; white-space: normal; word-break: break-all; }
+.log-entry.success { color: var(--success); }
 .id-copy-container { display: flex; gap: 8px; align-items: center; width: 100%; }
 .id-copy-container .peer-id-display { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.btn-copy { background-color: #334155; color: var(--text-main); padding: 10px 14px; font-size: 0.85rem; font-weight: 600; border-radius: 8px; white-space: nowrap; transition: all 0.2s ease; }
-.btn-copy:hover:not(:disabled) { background-color: #475569; }
-.btn-copy:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-copy { background-color: #334155; color: var(--text-main); padding: 10px 14px; font-size: 0.85rem; font-weight: 600; border-radius: 8px; white-space: nowrap; }
 
-/* ========================================================
-   RESPONSIVE DESIGN: OPTIMASI TAMPILAN HP (MOBILE LAYOUT)
-   ======================================================== */
 @media (max-width: 768px) {
     body { padding: 1rem 0; }
     .logo { font-size: 1.8rem; text-align: center; }
-    .subtitle { text-align: center; font-size: 0.9rem; }
-    .group-badge { display: block; text-align: center; margin: 10px auto 0 auto; max-width: max-content; }
     .grid-layout { grid-template-columns: 1fr; gap: 1rem; }
     button, input[type="text"], .file-input { padding: 12px; font-size: 0.95rem; }
+    .file-row { flex-direction: column; align-items: stretch; gap: 12px; }
+    .btn-download-action { width: 100%; padding: 12px; box-sizing: border-box; }
 }
-
 @media (max-width: 480px) {
     .id-copy-container { flex-direction: column; align-items: stretch; gap: 10px; }
-    .id-copy-container .peer-id-display { text-align: center; }
-    .btn-copy { width: 100%; text-align: center; }
     .connect-form { flex-direction: column; gap: 10px; }
-    .connect-form button { width: 100%; }
 }
