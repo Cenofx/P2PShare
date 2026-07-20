@@ -1,9 +1,7 @@
 ﻿let peer = null;         
 let connection = null;   
 let myPeerId = null;     
-
-// State terdistribusi untuk menampung serpihan berkas (chunks) yang masuk
-let incomingFiles = {}; 
+let incomingFiles = {}; // Tempat menampung serpihan teks berkas yang masuk
 
 const ui = {
     myId: document.getElementById('my-peer-id'),
@@ -22,14 +20,15 @@ const ui = {
 function initDistributedNode() {
     addLog("[SYSTEM] Menginisialisasi Jaringan WebRTC Peer-to-Peer...", "system");
     
-    // OPTIMASI JARINGAN: Menggunakan Google STUN Server agar tembus blokir antar jaringan (Wi-Fi vs Seluler)
+    // Konfigurasi STUN Server global agar bisa menembus batas jaringan Wi-Fi lokal
     peer = new Peer({
         config: {
             'iceServers': [
                 { url: 'stun:stun.l.google.com:19302' },
                 { url: 'stun:stun1.l.google.com:19302' },
                 { url: 'stun:stun2.l.google.com:19302' }
-            ]
+            ],
+            'sdpSemantics': 'unified-plan'
         }
     });
 
@@ -39,7 +38,6 @@ function initDistributedNode() {
         ui.myId.style.color = "var(--success)";
         ui.btnCopyId.disabled = false;
         addLog(`[SYSTEM] Node Anda aktif. ID terdistribusi Anda: ${id}`, "success");
-        addLog(`[SYSTEM] Bagikan ID ini ke teman kampus Anda.`, "system");
     });
 
     peer.on('error', (err) => {
@@ -62,7 +60,10 @@ ui.btnConnect.addEventListener('click', () => {
     addLog(`[P2P] Mencoba menghubungkan langsung ke ID: ${remoteId}...`, "p2p");
     ui.status.innerText = "Status: Mencoba Menghubungkan...";
     ui.btnConnect.disabled = true;
-    connection = peer.connect(remoteId);
+    
+    // Mengaktifkan fitur reliable transfer agar paket teks tidak ada yang hilang di jalan
+    connection = peer.connect(remoteId, { reliable: true });
+    
     setTimeout(() => {
         if (ui.status.className !== "status-text connected") {
             addLog("[ERROR] Koneksi P2P gagal. Teman mungkin offline atau ID salah.", "failed");
@@ -79,46 +80,58 @@ function setupConnectionListeners() {
         updateUiConnected(connection.peer);
     });
     
-    // PROTOKOL PENERIMAAN PAKET DATA (CHUNK ASSEMBLY)
-    connection.on('data', (data) => {
-        if (!data) return;
+    // RECEIVER: Protokol membaca aliran teks JSON yang sangat stabil
+    connection.on('data', (rawData) => {
+        try {
+            // Deteksi dan terjemahkan bungkusan teks string kembali menjadi objek
+            const message = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+            
+            if (!message) return;
 
-        // Langkah 1: Menerima Informasi Awal Berkas (Header)
-        if (data.type === 'file-start') {
-            incomingFiles[data.filename] = {
-                fileType: data.fileType,
-                totalChunks: data.totalChunks,
-                chunks: new Array(data.totalChunks),
-                receivedCount: 0
-            };
-            addLog(`[P2P] Sinyal masuk berkas: "${data.filename}" (${data.totalChunks} paket data)...`, "p2p");
-        } 
-        // Langkah 2: Menerima Serpihan Berkas dan Menjahitnya Kembali
-        else if (data.type === 'file-chunk') {
-            const fileState = incomingFiles[data.filename];
-            if (fileState) {
-                fileState.chunks[data.index] = data.data;
-                fileState.receivedCount++;
-                
-                // Jika semua paket serpihan sudah lengkap terkumpul
-                if (fileState.receivedCount === fileState.totalChunks) {
-                    addLog(`[P2P] Semua paket berkas "${data.filename}" sukses diterima! Menyusun file...`, "p2p");
+            // 1. Menerima Header Informasi File
+            if (message.type === 'file-start') {
+                incomingFiles[message.filename] = {
+                    fileType: message.fileType,
+                    totalChunks: message.totalChunks,
+                    chunks: new Array(message.totalChunks),
+                    receivedCount: 0
+                };
+                addLog(`[P2P] Sinyal masuk teks berkas: "${message.filename}" (${message.totalChunks} paket)...`, "p2p");
+            } 
+            // 2. Menerima Serpihan Teks Base64 dan Menyusunnya Kembali
+            else if (message.type === 'file-chunk') {
+                const fileState = incomingFiles[message.filename];
+                if (fileState) {
+                    // Konversi Teks Base64 kembali menjadi biner murni secara aman di dalam HP
+                    const binaryString = atob(message.data);
+                    const len = binaryString.length;
+                    const bytes = new Uint8Array(len);
+                    for (let i = 0; i < len; i++) {
+                        bytes[i] = binaryString.charCodeAt(i);
+                    }
                     
-                    // Satukan serpihan biner murni menjadi Blob tunggal siap unduh
-                    const blob = new Blob(fileState.chunks, { type: fileState.fileType });
-                    const downloadUrl = URL.createObjectURL(blob);
+                    fileState.chunks[message.index] = bytes.buffer;
+                    fileState.receivedCount++;
                     
-                    addLog(`[FILE-GET] Berhasil! -> <a href="${downloadUrl}" download="${data.filename}" class="btn-download">Klik untuk Simpan (${data.filename})</a>`, "file-get");
-                    
-                    // Bersihkan memori RAM dari state tampungan
-                    delete incomingFiles[data.filename];
+                    if (fileState.receivedCount === fileState.totalChunks) {
+                        addLog(`[P2P] Sukses menerima seluruh paket berkas "${message.filename}"!`, "success");
+                        
+                        const blob = new Blob(fileState.chunks, { type: fileState.fileType });
+                        const downloadUrl = URL.createObjectURL(blob);
+                        
+                        addLog(`[FILE-GET] Berhasil! -> <a href="${downloadUrl}" download="${message.filename}" class="btn-download">Klik untuk Simpan ke HP (${message.filename})</a>`, "file-get");
+                        
+                        delete incomingFiles[message.filename]; // Hapus memori tampungan agar HP tidak lag
+                    }
                 }
             }
+        } catch (err) {
+            // Mengabaikan jika ada kiriman teks non-JSON yang tidak sengaja masuk
         }
     });
     
     connection.on('close', () => {
-        addLog(`[WARNING] Teman kampus Anda (${connection.peer}) telah memutus koneksi.`, "system");
+        addLog(`[WARNING] Koneksi terputus.`, "system");
         resetUiConnection();
     });
 }
@@ -127,12 +140,11 @@ ui.fileInput.addEventListener('change', (e) => {
     ui.btnSendFile.disabled = e.target.files.length === 0;
 });
 
-// PROTOKOL PENGIRIMAN DATA BERTAHAP (DATA CHUNKING STREAM)
+// SENDER: Protokol pemotong file menjadi teks string JSON berkelanjutan
 ui.btnSendFile.addEventListener('click', () => {
     if (!connection) return;
     
     if (!ui.fileInput.files.length) {
-        addLog("[WARNING] Gagal mengirim: Silakan pilih file terlebih dahulu!", "system");
         alert("Pilih file materi kuliahnya dulu, King!");
         return;
     }
@@ -143,64 +155,59 @@ ui.btnSendFile.addEventListener('click', () => {
     ui.progressWrapper.style.display = "block";
     ui.progressBar.value = 0;
     
-    const fileReader = new FileReader();
-    fileReader.onload = (e) => {
-        const arrayBuffer = e.target.result;
-        const CHUNK_SIZE = 16384; // Potong berkas menjadi serpihan aman sebesar 16KB per paket
-        const totalChunks = Math.ceil(arrayBuffer.byteLength / CHUNK_SIZE);
-        
-        addLog(`[SYSTEM] Memecah berkas menjadi ${totalChunks} paket data...`, "system");
-        
-        // KIRIM HEADER: Beritahu penerima nama berkas dan jumlah paketnya
-        connection.send({
-            type: 'file-start',
-            filename: file.name,
-            fileType: file.type,
-            totalChunks: totalChunks
-        });
-        
-        let chunkIndex = 0;
-        
-        // Fungsi rekursif untuk mengalirkan paket satu per satu dengan jeda aman
-        function streamNextChunk() {
-            if (chunkIndex < totalChunks) {
-                const start = chunkIndex * CHUNK_SIZE;
-                const end = Math.min(arrayBuffer.byteLength, start + CHUNK_SIZE);
-                const chunk = arrayBuffer.slice(start, end);
+    const CHUNK_SIZE = 32768; // Potongan teks aman berukuran 32KB
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    
+    // Langkah 1: Kirim sinyal pembuka dalam bentuk teks string JSON
+    connection.send(JSON.stringify({
+        type: 'file-start',
+        filename: file.name,
+        fileType: file.type,
+        totalChunks: totalChunks
+    }));
+    
+    let offset = 0;
+    let chunkIndex = 0;
+    
+    // Langkah 2: Alirkan serpihan berkas yang dikonversi ke teks secara bertahap
+    function readAndStreamNextChunk() {
+        if (chunkIndex < totalChunks) {
+            const slice = file.slice(offset, offset + CHUNK_SIZE);
+            const fileReader = new FileReader();
+            
+            fileReader.onload = function(e) {
+                // Ambil string mentah teks Base64
+                const base64Data = e.target.result.split(',')[1];
                 
-                // Kirim serpihan paket ke-n
-                connection.send({
+                // Kirim paket berupa string JSON utuh
+                connection.send(JSON.stringify({
                     type: 'file-chunk',
                     filename: file.name,
                     index: chunkIndex,
-                    data: chunk
-                });
+                    data: base64Data
+                }));
                 
                 chunkIndex++;
+                offset += CHUNK_SIZE;
                 ui.progressBar.value = Math.round((chunkIndex / totalChunks) * 100);
                 
-                // Jeda rahasia 5ms agar buffer jaringan HP tidak meluap (overflow)
-                setTimeout(streamNextChunk, 5);
-            } else {
-                addLog(`[SYSTEM] Sukses mengalirkan seluruh paket berkas "${file.name}"!`, "success");
-                setTimeout(() => {
-                    ui.progressWrapper.style.display = "none";
-                    ui.btnSendFile.disabled = false;
-                    ui.fileInput.value = "";
-                }, 1500);
-            }
+                // Beri jeda 15 milidetik agar CPU handphone sempat memproses teksnya
+                setTimeout(readAndStreamNextChunk, 15);
+            };
+            
+            fileReader.readAsDataURL(slice);
+        } else {
+            addLog(`[SYSTEM] Sukses mengirim berkas "${file.name}" ke browser teman!`, "success");
+            setTimeout(() => {
+                ui.progressWrapper.style.display = "none";
+                ui.btnSendFile.disabled = false;
+                ui.fileInput.value = "";
+            }, 1500);
         }
-        
-        // Mulai aliran streaming data
-        setTimeout(streamNextChunk, 200);
-    };
+    }
     
-    fileReader.onerror = () => {
-        addLog(`[ERROR] Gagal membaca berkas kuliah.`, "failed");
-        ui.btnSendFile.disabled = false;
-        ui.progressWrapper.style.display = "none";
-    };
-    fileReader.readAsArrayBuffer(file);
+    // Mulai proses aliran teks
+    setTimeout(readAndStreamNextChunk, 200);
 });
 
 ui.btnCopyId.addEventListener('click', () => {
