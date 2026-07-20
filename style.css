@@ -43,7 +43,7 @@ header {
 }
 .grid-layout {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 1.5rem;
     margin-bottom: 1.5rem;
 }
@@ -123,9 +123,29 @@ progress::-webkit-progress-value { background-color: var(--primary); border-radi
 .log-entry.system { color: #eab308; }
 .log-entry.p2p { color: var(--primary); }
 .log-entry.file-get { color: var(--success); background-color: rgba(34, 197, 94, 0.1); }
-.btn-download { color: var(--success); text-decoration: underline; cursor: pointer; font-weight: bold; }
+.btn-download { color: var(--success); text-decoration: underline; cursor: pointer; font-weight: bold; white-space: normal; word-break: break-all; }
 .id-copy-container { display: flex; gap: 8px; align-items: center; width: 100%; }
 .id-copy-container .peer-id-display { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn-copy { background-color: #334155; color: var(--text-main); padding: 10px 14px; font-size: 0.85rem; font-weight: 600; border-radius: 8px; white-space: nowrap; transition: all 0.2s ease; }
 .btn-copy:hover:not(:disabled) { background-color: #475569; }
 .btn-copy:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ========================================================
+   RESPONSIVE DESIGN: OPTIMASI TAMPILAN HP (MOBILE LAYOUT)
+   ======================================================== */
+@media (max-width: 768px) {
+    body { padding: 1rem 0; }
+    .logo { font-size: 1.8rem; text-align: center; }
+    .subtitle { text-align: center; font-size: 0.9rem; }
+    .group-badge { display: block; text-align: center; margin: 10px auto 0 auto; max-width: max-content; }
+    .grid-layout { grid-template-columns: 1fr; gap: 1rem; }
+    button, input[type="text"], .file-input { padding: 12px; font-size: 0.95rem; }
+}
+
+@media (max-width: 480px) {
+    .id-copy-container { flex-direction: column; align-items: stretch; gap: 10px; }
+    .id-copy-container .peer-id-display { text-align: center; }
+    .btn-copy { width: 100%; text-align: center; }
+    .connect-form { flex-direction: column; gap: 10px; }
+    .connect-form button { width: 100%; }
+}
