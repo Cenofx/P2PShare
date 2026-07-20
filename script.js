@@ -1,6 +1,7 @@
 ﻿let peer = null;         
 let connection = null;   
 let myPeerId = null;     
+let currentTransferHeader = null; // State terdistribusi untuk menyimpan informasi file yang akan datang
 
 const ui = {
     myId: document.getElementById('my-peer-id'),
@@ -62,17 +63,33 @@ function setupConnectionListeners() {
         addLog(`[P2P] Terhubung langsung ke node teman: ${connection.peer}`, "success");
         updateUiConnected(connection.peer);
     });
+    
+    // LISTENER PROTOKOL BARU
     connection.on('data', (data) => {
-        if (data && data.type === 'file-transfer') {
-            addLog(`[P2P] Menerima file materi kuliah: "${data.filename}"`, "p2p");
+        // Cek jika yang masuk adalah Paket 1: Sinyal Metadata Control
+        if (data && data.type === 'metadata') {
+            currentTransferHeader = data;
+            addLog(`[P2P] Sinyal masuk terdeteksi untuk berkas: "${data.filename}"`, "p2p");
+        } 
+        // Cek jika data yang masuk setelahnya adalah Paket 2: Data Biner Mentah
+        else if (data) {
+            const isBinary = data instanceof ArrayBuffer || data instanceof Blob || data.byteLength !== undefined || data.size !== undefined;
             
-            // Mengubah data biner murni menjadi URL unduhan lokal yang sangat ringan
-            const blob = data.fileData instanceof Blob ? data.fileData : new Blob([data.fileData]);
-            const downloadUrl = URL.createObjectURL(blob);
-            
-            addLog(`[FILE-GET] Berhasil menerima file! -> <a href="${downloadUrl}" download="${data.filename}" class="btn-download">Klik untuk Simpan (${data.filename})</a>`, "file-get");
+            if (isBinary && currentTransferHeader) {
+                addLog(`[P2P] Menjahit paket biner untuk berkas "${currentTransferHeader.filename}"...`, "p2p");
+                
+                // Konversi aman biner murni lintas platform menjadi Blob lokal siap unduh
+                const blob = new Blob([data], { type: currentTransferHeader.fileType });
+                const downloadUrl = URL.createObjectURL(blob);
+                
+                addLog(`[FILE-GET] Berhasil menerima file! -> <a href="${downloadUrl}" download="${currentTransferHeader.filename}" class="btn-download">Klik untuk Simpan (${currentTransferHeader.filename})</a>`, "file-get");
+                
+                // Reset state untuk mengosongkan antrean file berikutnya
+                currentTransferHeader = null;
+            }
         }
     });
+    
     connection.on('close', () => {
         addLog(`[WARNING] Teman kampus Anda (${connection.peer}) telah memutus koneksi.`, "system");
         resetUiConnection();
@@ -93,31 +110,47 @@ ui.btnSendFile.addEventListener('click', () => {
     }
 
     const file = ui.fileInput.files[0];
-    addLog(`[SYSTEM] Mulai mengirim file: "${file.name}" via P2P...`, "system");
+    addLog(`[SYSTEM] Mempersiapkan pengiriman berkas: "${file.name}"`, "system");
     ui.btnSendFile.disabled = true;
     ui.progressWrapper.style.display = "block";
+    ui.progressBar.value = 20;
+    
+    // LANGKAH 1: Kirim Metadata Kontrol Terlebih Dahulu
+    connection.send({
+        type: 'metadata',
+        filename: file.name,
+        fileType: file.type
+    });
+    
     ui.progressBar.value = 50;
     
-    try {
-        // Optimasi: Kirim objek berkas mentah (Blob) langsung tanpa convert Base64 teks
-        connection.send({
-            type: 'file-transfer',
-            filename: file.name,
-            fileData: file
-        });
-        
-        ui.progressBar.value = 100;
-        addLog(`[SYSTEM] Berhasil mengirim file "${file.name}" ke browser teman!`, "success");
-        setTimeout(() => {
-            ui.progressWrapper.style.display = "none";
+    // LANGKAH 2: Baca berkas sebagai ArrayBuffer (Biner murni level rendah) dan langsung alirkan
+    const fileReader = new FileReader();
+    fileReader.onload = (e) => {
+        addLog(`[SYSTEM] Mengalirkan payload biner via WebRTC DataChannel...`, "system");
+        try {
+            // Kirim langsung biner tingkat atas tanpa dibungkus objek JSON kustom
+            connection.send(e.target.result);
+            
+            ui.progressBar.value = 100;
+            addLog(`[SYSTEM] Berhasil mengirim file "${file.name}" ke browser teman!`, "success");
+            setTimeout(() => {
+                ui.progressWrapper.style.display = "none";
+                ui.btnSendFile.disabled = false;
+                ui.fileInput.value = "";
+            }, 1500);
+        } catch (err) {
+            addLog(`[ERROR] Gagal transfer biner murni: ${err.message}`, "failed");
             ui.btnSendFile.disabled = false;
-            ui.fileInput.value = "";
-        }, 1500);
-    } catch (err) {
-        addLog(`[ERROR] Gagal mengirim data biner: ${err.message}`, "failed");
+            ui.progressWrapper.style.display = "none";
+        }
+    };
+    fileReader.onerror = () => {
+        addLog(`[ERROR] Gagal membaca berkas kuliah.`, "failed");
         ui.btnSendFile.disabled = false;
         ui.progressWrapper.style.display = "none";
-    }
+    };
+    fileReader.readAsArrayBuffer(file);
 });
 
 ui.btnCopyId.addEventListener('click', () => {
@@ -156,6 +189,7 @@ function resetUiConnection() {
     ui.remoteIdInput.disabled = false;
     ui.remoteIdInput.value = "";
     ui.btnConnect.disabled = false;
+    currentTransferHeader = null;
 }
 
 function addLog(message, type) {
