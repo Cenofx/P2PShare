@@ -7,10 +7,10 @@ Aplikasi berbagi file berbasis **Peer-to-Peer (P2P) Real-time** terdistribusi me
 ---
 
 ## 👥 Anggota Kelompok 4
-*   **Aksan**
-*   **Jabal**
-*   **Husen** (Husain Abdullah — *Cenofx*)
-*   **Aulan**
+*   **M.Aksan. R**(105841123024)
+*   **Jabal**(1058411---24)
+*   **Husain Abdulloh**(105841121524)
+*   **Aulan**(105841114824)
 
 ---
 
