@@ -1,11 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kampus P2P Share - Kelompok 4</title>
     <link rel="stylesheet" href="style.css">
-    <!-- LIBRARY UTAMA: PeerJS untuk koneksi P2P Nyata antar browser -->
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
@@ -13,22 +12,19 @@
         <header>
             <div class="logo">⚡ Kampus<span class="accent">P2P</span>Share</div>
             <p class="subtitle">Berbagi File Instan Tanpa Internet (Peer-to-Peer Real-time)</p>
-            <div class="group-badge">
-                Kelompok 4: Aksan, Jabal, Husen, Aulan
-            </div>
+            <div class="group-badge">Kelompok 4: Aksan, Jabal, Husen, Aulan</div>
         </header>
-
         <main class="grid-layout">
-            <!-- Bagian 1: Identitas & Koneksi -->
             <section class="card connection-panel">
                 <h2>1. Identitas Anda (Node)</h2>
                 <div class="my-id-wrapper">
                     <p>ID Unik Anda:</p>
-                    <div id="my-peer-id" class="peer-id-display">Menghubungkan ke jaringan...</div>
+                    <div class="id-copy-container">
+                        <div id="my-peer-id" class="peer-id-display">Menghubungkan...</div>
+                        <button id="btn-copy-id" class="btn-copy" disabled>📋 Salin ID</button>
+                    </div>
                 </div>
-                
                 <hr class="divider">
-                
                 <h2>2. Hubungkan ke Teman</h2>
                 <div class="connect-form">
                     <input type="text" id="remote-peer-id" placeholder="Masukkan ID Teman">
@@ -36,8 +32,6 @@
                 </div>
                 <div id="connection-status" class="status-text pending">Status: Belum Terhubung</div>
             </section>
-
-            <!-- Bagian 2: Kirim File -->
             <section class="card transfer-panel" id="transfer-panel" style="opacity: 0.5; pointer-events: none;">
                 <h2>3. Kirim File</h2>
                 <p class="info-text">Pilih file materi kuliah untuk dikirim langsung ke browser teman.</p>
@@ -51,8 +45,6 @@
                 </div>
             </section>
         </main>
-
-        <!-- Bagian Log & Kotak Masuk -->
         <section class="card logs-section">
             <h2>📜 Konsol Log & File Masuk (Sistem Terdistribusi Real-time)</h2>
             <div id="log-container" class="log-container">
